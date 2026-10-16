@@ -4,6 +4,7 @@ using System.Text.Json;
 var directory = Path.Combine(Path.GetTempPath(), "WinverterStateTests-" + Guid.NewGuid().ToString("N"));
 var file = Path.Combine(directory, "state.json");
 var store = new AlwaysInvertStore(file);
+var preferencesFile = Path.Combine(directory, "preferences.json");
 void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
 try
 {
@@ -25,10 +26,23 @@ try
     catch (JsonException) { }
     Check(File.ReadAllText(file) == "{broken", "Loading corrupt settings must not overwrite them.");
     Check(Directory.GetFiles(directory, "*.tmp").Length == 0, "Save must leave no temporary files.");
+    var preferencesStore = new PreferencesStore(preferencesFile);
+    Check(!preferencesStore.Load().StartInNotificationArea, "First use must open the main window.");
+    preferencesStore.Save(new Preferences { StartInNotificationArea = true });
+    Check(new PreferencesStore(preferencesFile).Load().StartInNotificationArea, "Tray-only preference must survive restart.");
+    preferencesStore.Save(new Preferences { StartInNotificationArea = false });
+    Check(!new PreferencesStore(preferencesFile).Load().StartInNotificationArea, "Turning off tray-only startup must persist.");
+    File.WriteAllText(preferencesFile, "{}");
+    Check(!preferencesStore.Load().StartInNotificationArea, "Missing preference flag must default to false.");
+    File.WriteAllText(preferencesFile, "{broken");
+    try { preferencesStore.Load(); throw new Exception("Malformed preferences accepted."); }
+    catch (JsonException) { }
+    Check(File.ReadAllText(preferencesFile) == "{broken", "Loading invalid preferences must preserve the file.");
     Console.WriteLine("All persistence checks passed.");
 }
 finally
 {
     if (File.Exists(file)) File.Delete(file);
+    if (File.Exists(preferencesFile)) File.Delete(preferencesFile);
     if (Directory.Exists(directory)) Directory.Delete(directory);
 }

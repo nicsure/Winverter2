@@ -50,6 +50,9 @@ internal static class DarkTheme
             list.BackColor = Surface;
             list.BorderStyle = BorderStyle.FixedSingle;
             list.OwnerDraw = true;
+            // DrawColumnHeader only covers actual columns, not the native header's
+            // remaining width. Keep that area dark as well.
+            _ = new HeaderBackground(list);
             list.DrawColumnHeader += (_, e) =>
             {
                 using var brush = new SolidBrush(Header);
@@ -78,5 +81,57 @@ internal static class DarkTheme
         bounds.Inflate(-6, 0);
         TextRenderer.DrawText(graphics, text, font, bounds, Text,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+    }
+
+    private sealed class HeaderBackground : NativeWindow
+    {
+        private const int LvmGetHeader = 0x101F;
+        private const int HdmGetItemCount = 0x1200;
+        private const int HdmGetItemRect = 0x1207;
+        private const int WmPaint = 0x000F;
+        private const int WmPrintClient = 0x0318;
+
+        [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+        private static extern nint SendMessage(nint hwnd, int message, nint wParam, nint lParam);
+        [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+        private static extern nint SendMessage(nint hwnd, int message, nint wParam, ref Native.Rect rect);
+        [DllImport("user32.dll")]
+        private static extern bool GetClientRect(nint hwnd, out Native.Rect rect);
+
+        internal HeaderBackground(ListView list)
+        {
+            // Event subscriptions retain this subclass for the list's lifetime.
+            list.HandleCreated += (_, _) => Attach(list);
+            list.HandleDestroyed += (_, _) => ReleaseHandle();
+            if (list.IsHandleCreated) Attach(list);
+        }
+
+        private void Attach(ListView list)
+        {
+            if (Handle != 0) ReleaseHandle();
+            var header = SendMessage(list.Handle, LvmGetHeader, 0, 0);
+            if (header != 0) AssignHandle(header);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+            if (m.Msg != WmPaint && m.Msg != WmPrintClient) return;
+            if (Handle == 0 || !GetClientRect(Handle, out var client)) return;
+            int right = 0;
+            int count = (int)SendMessage(Handle, HdmGetItemCount, 0, 0);
+            for (int index = 0; index < count; index++)
+            {
+                var rect = new Native.Rect();
+                if (SendMessage(Handle, HdmGetItemRect, index, ref rect) != 0)
+                    right = Math.Max(right, rect.Right);
+            }
+            if (right >= client.Right) return;
+            // Native header rectangles already account for horizontal scrolling and DPI.
+            using var graphics = m.Msg == WmPrintClient && m.WParam != 0
+                ? Graphics.FromHdc(m.WParam) : Graphics.FromHwnd(Handle);
+            using var brush = new SolidBrush(Header);
+            graphics.FillRectangle(brush, Rectangle.FromLTRB(right, client.Top, client.Right, client.Bottom));
+        }
     }
 }

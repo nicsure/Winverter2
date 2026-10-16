@@ -31,7 +31,7 @@ dotnet run --project Winverter2/Winverter2.csproj
 
 Alternatively, open `Winverter2.slnx` in a compatible Visual Studio version, or open `Winverter2/Winverter2.csproj` directly, and press **F5**.
 
-Close any running copy before rebuilding to avoid locking the executable.
+Exit any running copy using the notification icon's **Exit Winverter** menu before rebuilding to avoid locking the executable.
 
 ## Invert running applications
 
@@ -73,7 +73,15 @@ Rules persist between application runs and Windows restarts. Launch Winverter ag
 
 - Click **Stop inversion** to restore all windows and pause automatic inversion.
 - Click **Resume inversion** to resume saved Always Invert rules. Manually selected applications need to be selected again.
-- Close Winverter to remove all inversion overlays.
+- Closing the main window hides it in the notification area; inversion and automatic detection keep running.
+- Double-click the crescent-moon notification icon, or right-click it and choose **Open Winverter**, to reopen the window.
+- To shut down completely and remove all inversion overlays, right-click the notification icon and choose **Exit Winverter**.
+
+The notification icon is present while Winverter is running, whether the main window is visible or hidden. Windows may place it in the notification area's overflow menu; use Windows taskbar settings to pin it if desired.
+
+### Start without opening the main window
+
+Enable **Start in notification area** to start future runs with only the notification icon visible. This defaults to unchecked on first use and is saved immediately in `%LOCALAPPDATA%\Winverter2\preferences.json`. Always Invert rules and periodic scanning still run when the window is hidden. Reopen the window through the notification icon to change the setting. Uncheck it to show the main window on future launches. This setting does not register the application to launch at Windows sign-in.
 
 Pausing does not delete saved rules. The paused state is not retained between runs.
 
@@ -89,10 +97,13 @@ Inversion uses the [Windows Magnification API](https://learn.microsoft.com/en-us
 
 ## Development checks
 
+The executable, main window, and notification area share a transparent crescent-moon icon with sizes from 16 to 256 pixels. To regenerate the assets on Windows, run `./scripts/New-AppIcon.ps1` in PowerShell.
+
 Run the persistence checks from the repository root:
 
 ```powershell
 dotnet run --project tests/StateTests
+dotnet run --project tests/StartupTests
 ```
 
 For manual verification, test multiple selections, dialogs, overlapping windows, minimize/restore, and movement between monitors with different scaling. Add and remove Always Invert rules, restart Winverter, and close/relaunch a matching application to verify persistence and automatic detection. Check that Stop/Resume and the current-user filter behave as expected.

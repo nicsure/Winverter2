@@ -8,6 +8,11 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ImplicitUsings>enable</ImplicitUsings>
     <PlatformTarget>x64</PlatformTarget>
+    <ApplicationIcon>Assets\Winverter.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\Winverter.ico" LogicalName="Winverter2.AppIcon" />
+  </ItemGroup>
 
 </Project>

@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../Winverter2/AlwaysInvertStore.cs" Link="AlwaysInvertStore.cs" />
+    <Compile Include="../../Winverter2/PreferencesStore.cs" Link="PreferencesStore.cs" />
   </ItemGroup>
 </Project>

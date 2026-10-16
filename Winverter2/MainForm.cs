@@ -7,6 +7,10 @@ public partial class MainForm : Form
 {
     private readonly ListView applications = new() { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = true, HideSelection = false };
     private readonly CheckBox currentUser = new() { Text = "Only processes owned by the current user", Checked = true, AutoSize = true };
+    private readonly CheckBox startInNotificationArea = new() { Text = "Start in notification area", AutoSize = true };
+    private readonly PreferencesStore preferencesStore = new();
+    private Preferences preferences = new();
+    internal bool StartInNotificationArea => preferences.StartInNotificationArea;
     private readonly Label status = new() { Dock = DockStyle.Bottom, Height = 52, Padding = new Padding(10) };
     private readonly Dictionary<nint, InversionOverlay> overlays = new();
     private readonly System.Windows.Forms.Timer animation = new() { Interval = 33 };
@@ -17,7 +21,7 @@ public partial class MainForm : Form
     private readonly HashSet<string> alwaysPaths = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<int> automaticProcesses = [];
     private readonly Button stopButton = new() { Text = "Stop inversion", AutoSize = true };
-    private bool paused;
+    private bool paused, restoringPreference;
     private bool updating, magnificationReady;
     private readonly string? currentSid = GetCurrentSid();
 
@@ -26,6 +30,10 @@ public partial class MainForm : Form
     public MainForm()
     {
         InitializeComponent();
+        try { preferences = preferencesStore.Load(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        { MessageBox.Show($"Could not load startup preferences. Winverter will open normally.\n\n{ex.Message}", "Preferences unavailable", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        startInNotificationArea.Checked = preferences.StartInNotificationArea;
         Text = "Winverter — application colour inversion";
         MinimumSize = new Size(900, 620);
         ClientSize = new Size(1000, 680);
@@ -35,7 +43,7 @@ public partial class MainForm : Form
         applications.Columns.Add("Window titles", 420);
         var refreshButton = new Button { Text = "Refresh", AutoSize = true };
         var toolbar = new FlowLayoutPanel { Dock = DockStyle.Top, Padding = new Padding(10), AutoSize = true };
-        toolbar.Controls.AddRange([currentUser, refreshButton, stopButton]);
+        toolbar.Controls.AddRange([currentUser, refreshButton, stopButton, startInNotificationArea]);
         var addButton = new Button { Text = "Add selected to Always Invert", AutoSize = true };
         var browseButton = new Button { Text = "Add executable…", AutoSize = true };
         var removeButton = new Button { Text = "Remove selected", AutoSize = true };
@@ -57,6 +65,8 @@ public partial class MainForm : Form
         Controls.Add(toolbar);
         Controls.Add(status);
         DarkTheme.Apply(this);
+        InitializeNotificationArea();
+        startInNotificationArea.CheckedChanged += (_, _) => SaveStartupPreference();
         refreshButton.Click += (_, _) => RefreshApplications();
         stopButton.Click += (_, _) =>
         {
@@ -71,22 +81,43 @@ public partial class MainForm : Form
         applications.SelectedIndexChanged += (_, _) => SelectApplications();
         animation.Tick += (_, _) => UpdateInversion();
         refresh.Tick += (_, _) => RefreshApplications();
-        Shown += (_, _) =>
-        {
-            magnificationReady = Native.MagInitialize();
-            try { alwaysPaths.UnionWith(store.Load().Where(path => !IsOwnExecutable(path))); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException)
-            { MessageBox.Show(this, $"Could not load Always Invert settings. The saved file has been left unchanged.\n\n{ex.Message}", "Settings could not be loaded", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-            RefreshAlwaysList();
-            StopInversion();
-            RefreshApplications();
-            refresh.Start(); animation.Start();
-        };
         FormClosed += (_, _) =>
         {
             animation.Dispose(); refresh.Dispose(); StopInversion();
             if (magnificationReady) Native.MagUninitialize();
         };
+    }
+
+    // Initialize independently of Shown so tray-only startup still runs inversion.
+    internal void InitializeRuntime()
+    {
+        _ = Handle;
+        magnificationReady = Native.MagInitialize();
+        try { alwaysPaths.UnionWith(store.Load().Where(path => !IsOwnExecutable(path))); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException)
+        { MessageBox.Show(this, $"Could not load Always Invert settings. The saved file has been left unchanged.\n\n{ex.Message}", "Settings could not be loaded", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        RefreshAlwaysList();
+        StopInversion();
+        RefreshApplications();
+        refresh.Start(); animation.Start();
+    }
+
+    private void SaveStartupPreference()
+    {
+        if (restoringPreference) return;
+        var next = preferences with { StartInNotificationArea = startInNotificationArea.Checked };
+        try { preferencesStore.Save(next); preferences = next; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Restore the previous value without retrying the failed write.
+            if (startInNotificationArea.Checked != preferences.StartInNotificationArea)
+            {
+                restoringPreference = true;
+                try { startInNotificationArea.Checked = preferences.StartInNotificationArea; }
+                finally { restoringPreference = false; }
+            }
+            MessageBox.Show(this, $"The startup preference could not be saved.\n\n{ex.Message}", "Save failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private bool OwnedByCurrentUser(int pid)

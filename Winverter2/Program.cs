@@ -11,7 +11,10 @@ namespace Winverter2
             // To customize application configuration such as set high DPI settings or default font,
             // see https://aka.ms/applicationconfiguration.
             ApplicationConfiguration.Initialize();
-            Application.Run(new MainForm());
+            using var mainForm = new MainForm();
+            mainForm.InitializeRuntime();
+            using var context = new TrayApplicationContext(mainForm, showWindow: !mainForm.StartInNotificationArea);
+            Application.Run(context);
         }
     }
 }
