@@ -1,6 +1,6 @@
 # Winverter2
 
-Winverter2 is a Windows Forms application that inverts the colours of other applications' windows. Use it to make light windows darker without changing the applications themselves. A free and open-source alternative to other paid applications.
+Winverter2 is a Windows Forms application that inverts the colours of other applications' windows. Use it to make light windows darker without changing the applications themselves. A free and open-source alternative to other paid applications like '[Dark Mode Any App](https://darkmodeanyapp.com)'
 
 ## Features
 
